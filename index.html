@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>手指向前數｜數學小花園</title>
+<style>
+:root{color-scheme:light;--ink:#18362c;--leaf:#245e49;--mint:#e6f2e8;--paper:#f6f8ef;--edge:#cadacd}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"PingFang HK","Microsoft JhengHei",sans-serif;background:var(--paper);color:var(--ink)}
+header,main,footer{max-width:920px;margin:auto;padding:18px clamp(12px,4vw,28px)}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+a{color:var(--leaf);font-weight:700}button{font:inherit;font-weight:750;min-height:48px;touch-action:manipulation;cursor:pointer;color:var(--ink);background:#fff;border:2px solid var(--edge);border-radius:14px;padding:9px 16px}
+button[aria-pressed=true],.primary{background:var(--leaf);color:white;border-color:var(--leaf)}button:focus-visible,a:focus-visible{outline:4px solid #ad6800;outline-offset:3px}button:disabled{cursor:default}
+h1{margin:0;font-size:clamp(25px,5vw,42px)}h2{margin:0 0 12px}p{line-height:1.55}main{padding-top:4px}
+.toolbar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:12px 0}.cluster{display:flex;gap:6px;flex-wrap:wrap}.cluster button{padding:8px 11px}
+.board{background:white;border:1px solid var(--edge);border-radius:24px;text-align:center;padding:clamp(12px,3vw,26px)}
+.progress{font-size:14px;color:#456858;font-weight:750}.equation{font-size:clamp(40px,9vw,72px);font-weight:850;margin:0;line-height:1.25;font-variant-numeric:tabular-nums}
+.instruction{font-size:clamp(18px,4vw,25px);font-weight:750;margin:10px 0 0}.count{display:inline-flex;gap:8px;align-items:baseline;justify-content:center;background:var(--mint);border-radius:12px;padding:6px 14px;margin:12px 0;font-size:18px}.count strong{font-size:clamp(26px,6vw,40px)}
+.hands{display:flex;gap:clamp(8px,3vw,24px);justify-content:center;flex-wrap:wrap;margin:6px 0}.hand{display:flex;align-items:end;justify-content:center;gap:3px;padding:5px 5px 0}.palm{height:15px;border-radius:0 0 26px 26px;background:#f5cc9b;margin:0 5px 5px}
+.finger{width:clamp(44px,9vw,66px);height:77px;border-radius:24px 24px 7px 7px;background:#ffe0b6;border:2px solid #946038;padding:4px;font-size:25px;color:#673e25}.finger:nth-child(3){height:94px}.finger:nth-child(4){height:87px}.finger:nth-child(2){height:84px}
+.finger:disabled{height:49px;background:#e3eee5;border-color:#7c9b87;color:#315b46;border-radius:12px;font-size:22px}
+.choices,.actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:12px 0}.choice{min-width:80px;min-height:65px;font-size:29px}
+.feedback{min-height:28px;margin:6px 0;font-size:18px;font-weight:750;color:#875016}.feedback.good{color:var(--leaf)}.steps{color:#456858;font-size:16px;margin:3px 0}footer{font-size:14px;color:#456858}
+dialog{max-width:min(92vw,520px);padding:22px;border:1px solid var(--edge);border-radius:20px;color:var(--ink)}dialog::backdrop{background:#18362c77}dialog img{display:block;width:min(210px,70vw);margin:auto}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>數學小花園 · 分層練習</header>
+<main>
+<h1>手指向前數</h1>
+<div class="toolbar">
+<div class="cluster" aria-label="選擇階段"><button id="stage1" aria-pressed="true">階段 1</button><button id="stage2" aria-pressed="false">階段 2</button></div>
+<div class="cluster" aria-label="選擇模式"><button id="guided" aria-pressed="true">練習</button><button id="challenge" aria-pressed="false">挑戰</button></div>
+</div>
+<section class="board" aria-label="手指加法">
+<div id="progress" class="progress"></div>
+<p class="equation" id="equation"></p>
+<p class="instruction" id="instruction"></p>
+<p class="count" id="count" aria-live="polite"></p>
+<div id="hands" class="hands"></div>
+<p class="steps" id="steps"></p>
+<div id="choices" class="choices" hidden aria-label="答案選項"></div>
+<p id="feedback" class="feedback" role="status"></p>
+<div class="actions">
+<button id="hint" hidden>看提示</button>
+<button id="reset">重數這題</button>
+<button id="next" class="primary" hidden>下一題 →</button>
+</div>
+</section>
+</main>
+<footer>每輪 5 題 · 不設倒數 · 不用輸入姓名</footer>
+
+<script>
+const el = id => document.getElementById(id);
+const exercises = {
+  1: [[5,2],[6,3],[7,1],[4,4],[8,2]],
+  2: [[13,4],[14,6],[15,6],[16,3],[17,5]]
+};
+let stage = new URLSearchParams(location.search).get('stage') === '2' ? 2 : 1;
+let guided = true;
+let question = 0;
+let counted = 0;
+let solved = false;
+let completed = false;
+
+function questionData() {
+  return exercises[stage][question];
+}
+
+function showFeedback(message, good = false) {
+  el('feedback').textContent = message;
+  el('feedback').classList.toggle('good', good);
+}
+
+function showCount() {
+  const [first, second] = questionData();
+  el('count').innerHTML = counted === 0
+    ? '心裏的數 <strong>' + first + '</strong>'
+    : guided
+      ? '數到 <strong>' + (first + counted) + '</strong>'
+      : '已收起 <strong>' + counted + ' / ' + second + '</strong> 隻';
+  el('steps').textContent = counted === second
+    ? '手指數完了。想一想，最後數到哪個數？'
+    : '每點一隻手指，就說出下一個數。';
+}
+
+function renderHands(second) {
+  el('hands').replaceChildren();
+  for (let start = 0; start < second; start += 5) {
+    const group = document.createElement('div');
+    const row = document.createElement('div');
+    const palm = document.createElement('div');
+    row.className = 'hand';
+    palm.className = 'palm';
+    palm.setAttribute('aria-hidden', 'true');
+    for (let i = start; i < Math.min(start + 5, second); i++) {
+      const button = document.createElement('button');
+      button.className = 'finger';
+      button.textContent = '•';
+      button.setAttribute('aria-label', '收起第 ' + (i + 1) + ' 隻手指');
+      button.onclick = () => {
+        button.disabled = true;
+        button.textContent = '✓';
+        counted++;
+        showCount();
+        if (counted === second) el('choices').hidden = false;
+      };
+      row.append(button);
+    }
+    group.append(row, palm);
+    el('hands').append(group);
+  }
+}
+
+function showQuestion() {
+  const [first, second] = questionData();
+  counted = 0;
+  solved = false;
+  completed = false;
+  const total = first + second;
+  el('progress').textContent = '階段 ' + stage + ' · 第 ' + (question + 1) + ' / 5 題';
+  el('equation').textContent = first + ' ＋ ' + second + ' ＝ ？';
+  el('instruction').textContent = first + ' 放在心裏。伸出 ' + second + ' 隻手指。';
+  showCount();
+  renderHands(second);
+  el('choices').replaceChildren();
+  const alternatives = [total - 1, total, total + 1];
+  if (stage === 1) alternatives.splice(2);
+  const rotation = question % alternatives.length;
+  const answers = alternatives.slice(rotation).concat(alternatives.slice(0, rotation));
+  for (const value of answers) {
+    const button = document.createElement('button');
+    button.className = 'choice';
+    button.textContent = value;
+    button.onclick = () => {
+      if (value !== total) {
+        showFeedback('再想一想。最後一隻手指數到多少？');
+        el('hint').hidden = false;
+        return;
+      }
+      solved = true;
+      el('equation').textContent = first + ' ＋ ' + second + ' ＝ ' + total;
+      showFeedback('答對了！最後數到 ' + total + '。', true);
+      for (const option of el('choices').children) option.disabled = true;
+      el('next').hidden = false;
+      el('next').textContent = question === 4 ? '完成 →' : '下一題 →';
+      el('hint').hidden = true;
+    };
+    el('choices').append(button);
+  }
+  el('choices').hidden = true;
+  el('next').hidden = true;
+  el('reset').hidden = false;
+  el('hint').hidden = guided;
+  showFeedback('');
+}
+
+function restart() {
+  question = 0;
+  el('stage1').setAttribute('aria-pressed', stage === 1);
+  el('stage2').setAttribute('aria-pressed', stage === 2);
+  el('guided').setAttribute('aria-pressed', guided);
+  el('challenge').setAttribute('aria-pressed', !guided);
+  showQuestion();
+}
+
+el('stage1').onclick = () => { if (stage !== 1) { stage = 1; restart(); } };
+el('stage2').onclick = () => { if (stage !== 2) { stage = 2; restart(); } };
+el('guided').onclick = () => { if (!guided) { guided = true; restart(); } };
+el('challenge').onclick = () => { if (guided) { guided = false; restart(); } };
+el('reset').onclick = showQuestion;
+el('hint').onclick = () => {
+  const [first] = questionData();
+  showFeedback('心裏是 ' + first + '。第一隻手指由 ' + (first + 1) + ' 開始數。');
+};
+el('next').onclick = () => {
+  if (completed) { restart(); return; }
+  if (!solved) return;
+  if (question < 4) {
+    question++;
+    showQuestion();
+    return;
+  }
+  completed = true;
+  el('progress').textContent = '完成 5 題';
+  el('equation').textContent = '做得好！';
+  el('instruction').textContent = '試用自己的手指，再做一道新題。';
+  el('count').textContent = '心裏的數 → 下一個數';
+  el('steps').textContent = '';
+  el('hands').replaceChildren();
+  el('choices').hidden = true;
+  el('reset').hidden = true;
+  el('hint').hidden = true;
+  el('next').textContent = '再玩一次';
+  showFeedback('');
+};
+restart();
+</script>
+</body>
+</html>
